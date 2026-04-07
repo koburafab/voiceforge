@@ -15,16 +15,16 @@ const OPENAI_VOICES = [
 ]
 
 const ELEVENLABS_VOICES = [
-  { id: 'Rachel', name: 'Rachel (F)' },
-  { id: 'Drew', name: 'Drew (M)' },
-  { id: 'Clyde', name: 'Clyde (M)' },
-  { id: 'Paul', name: 'Paul (M)' },
-  { id: 'Domi', name: 'Domi (F)' },
-  { id: 'Dave', name: 'Dave (M)' },
-  { id: 'Fin', name: 'Fin (M)' },
-  { id: 'Sarah', name: 'Sarah (F)' },
-  { id: 'Antoni', name: 'Antoni (M)' },
-  { id: 'Elli', name: 'Elli (F)' },
+  { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah (F)' },
+  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'George (M)' },
+  { id: 'Xb7hH8MSUJpSbSDYk0k2', name: 'Alice (F)' },
+  { id: 'XrExE9yKIg1WjnnlVkGX', name: 'Matilda (F)' },
+  { id: 'cjVigY5qzO86Huf0OWal', name: 'Eric (M)' },
+  { id: 'IKne3meq5aSn9XLyUdCD', name: 'Charlie (M)' },
+  { id: 'FGY2WhTYpPnrIDTdsKH5', name: 'Laura (F)' },
+  { id: 'CwhRBWXzGAHq8TQ4Fs17', name: 'Roger (M)' },
+  { id: 'SAz9YHcvj6GT2YYXdXww', name: 'River (N)' },
+  { id: 'cgSgspJ2msm6clMCkdW9', name: 'Jessica (F)' },
 ]
 
 // Cache previews in memory
@@ -42,7 +42,7 @@ export function VoiceSelector() {
 
   const handleProviderChange = (p: Provider) => {
     setProvider(p)
-    setVoice(p === 'openai' ? 'nova' : 'Rachel')
+    setVoice(p === 'openai' ? 'nova' : 'EXAVITQu4vr4xnSDxMaL')
   }
 
   const handlePreview = useCallback(async () => {
