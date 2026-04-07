@@ -3,6 +3,7 @@ import { useAudioStore } from '../stores/audioStore'
 import { synthesize } from '../api/client'
 import { VoiceSelector } from './VoiceSelector'
 import { splitText, estimateCost } from '../utils/textSplitter'
+import { cleanForTts } from '../utils/textCleaner'
 
 export function TtsPanel() {
   const ttsText = useAudioStore((s) => s.ttsText)
@@ -38,7 +39,13 @@ export function TtsPanel() {
 
     setGenerating(true)
     try {
-      const chunks = splitText(ttsText)
+      const cleaned = cleanForTts(ttsText)
+      if (!cleaned.trim()) {
+        alert('Aucun texte lisible apres nettoyage')
+        setGenerating(false)
+        return
+      }
+      const chunks = splitText(cleaned)
       const blobs: Blob[] = []
 
       for (let i = 0; i < chunks.length; i++) {
