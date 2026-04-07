@@ -116,7 +116,7 @@ export function TtsPanel() {
       // Add to history
       addHistory({
         id: crypto.randomUUID(),
-        text: ttsText.slice(0, 200),
+        text: ttsText,
         voice,
         provider,
         timestamp: Date.now(),
@@ -126,7 +126,7 @@ export function TtsPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          text: ttsText.slice(0, 200),
+          text: ttsText,
           voice,
           provider,
           timestamp: Date.now(),
