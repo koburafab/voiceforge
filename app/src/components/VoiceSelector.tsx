@@ -1,4 +1,6 @@
+import { useCallback, useRef, useState } from 'react'
 import { useAudioStore, type Provider } from '../stores/audioStore'
+import { synthesize } from '../api/client'
 
 const OPENAI_VOICES = [
   { id: 'alloy', name: 'Alloy' },
@@ -25,19 +27,58 @@ const ELEVENLABS_VOICES = [
   { id: 'Elli', name: 'Elli (F)' },
 ]
 
+// Cache previews in memory
+const previewCache = new Map<string, string>()
+
 export function VoiceSelector() {
   const voice = useAudioStore((s) => s.voice)
   const setVoice = useAudioStore((s) => s.setVoice)
   const provider = useAudioStore((s) => s.provider)
   const setProvider = useAudioStore((s) => s.setProvider)
+  const [previewing, setPreviewing] = useState(false)
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null)
 
   const voices = provider === 'openai' ? OPENAI_VOICES : ELEVENLABS_VOICES
 
   const handleProviderChange = (p: Provider) => {
     setProvider(p)
-    const defaultVoice = p === 'openai' ? 'nova' : 'Rachel'
-    setVoice(defaultVoice)
+    setVoice(p === 'openai' ? 'nova' : 'Rachel')
   }
+
+  const handlePreview = useCallback(async () => {
+    const cacheKey = `${provider}:${voice}`
+
+    // Stop previous preview
+    if (previewAudioRef.current) {
+      previewAudioRef.current.pause()
+      previewAudioRef.current = null
+    }
+
+    // Check cache
+    if (previewCache.has(cacheKey)) {
+      const audio = new Audio(previewCache.get(cacheKey)!)
+      previewAudioRef.current = audio
+      audio.play()
+      return
+    }
+
+    setPreviewing(true)
+    try {
+      const text = `Bonjour, je suis la voix ${voice}.`
+      const buffer = await synthesize(text, voice, provider, 1)
+      const blob = new Blob([buffer], { type: 'audio/mpeg' })
+      const url = URL.createObjectURL(blob)
+      previewCache.set(cacheKey, url)
+
+      const audio = new Audio(url)
+      previewAudioRef.current = audio
+      audio.play()
+    } catch (err) {
+      alert(`Preview error: ${err instanceof Error ? err.message : err}`)
+    } finally {
+      setPreviewing(false)
+    }
+  }, [voice, provider])
 
   return (
     <div className="voice-selector">
@@ -60,6 +101,14 @@ export function VoiceSelector() {
           <option key={v.id} value={v.id}>{v.name}</option>
         ))}
       </select>
+      <button
+        className="btn btn--preview"
+        onClick={handlePreview}
+        disabled={previewing}
+        title="Ecouter un sample de cette voix"
+      >
+        {previewing ? '...' : '▶'}
+      </button>
     </div>
   )
 }

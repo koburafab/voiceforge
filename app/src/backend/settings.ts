@@ -8,6 +8,7 @@ export interface Settings {
   defaultVoice: string
   defaultProvider: 'openai' | 'elevenlabs'
   speed: number
+  theme: 'system' | 'dark' | 'light'
 }
 
 const DEFAULTS: Settings = {
@@ -16,6 +17,7 @@ const DEFAULTS: Settings = {
   defaultVoice: 'nova',
   defaultProvider: 'openai',
   speed: 1,
+  theme: 'system',
 }
 
 function getPath(): string {

@@ -1,7 +1,8 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAudioStore } from '../stores/audioStore'
 import { synthesize } from '../api/client'
 import { VoiceSelector } from './VoiceSelector'
+import { splitText, estimateCost } from '../utils/textSplitter'
 
 export function TtsPanel() {
   const ttsText = useAudioStore((s) => s.ttsText)
@@ -16,13 +17,16 @@ export function TtsPanel() {
   const setPlaying = useAudioStore((s) => s.setPlaying)
   const audioUrl = useAudioStore((s) => s.audioUrl)
   const setAudioUrl = useAudioStore((s) => s.setAudioUrl)
+  const generateProgress = useAudioStore((s) => s.generateProgress)
+  const setGenerateProgress = useAudioStore((s) => s.setGenerateProgress)
+  const addHistory = useAudioStore((s) => s.addHistory)
 
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   const handlePlay = useCallback(async () => {
     if (!ttsText.trim()) return
 
-    // Stop current playback
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current = null
@@ -34,9 +38,20 @@ export function TtsPanel() {
 
     setGenerating(true)
     try {
-      const buffer = await synthesize(ttsText, voice, provider, speed)
-      const blob = new Blob([buffer], { type: 'audio/mpeg' })
-      const url = URL.createObjectURL(blob)
+      const chunks = splitText(ttsText)
+      const blobs: Blob[] = []
+
+      for (let i = 0; i < chunks.length; i++) {
+        if (chunks.length > 1) {
+          setGenerateProgress(`Partie ${i + 1}/${chunks.length}...`)
+        }
+        const buffer = await synthesize(chunks[i], voice, provider, speed)
+        blobs.push(new Blob([buffer], { type: 'audio/mpeg' }))
+      }
+
+      setGenerateProgress(null)
+      const fullBlob = new Blob(blobs, { type: 'audio/mpeg' })
+      const url = URL.createObjectURL(fullBlob)
       setAudioUrl(url)
 
       const audio = new Audio(url)
@@ -45,12 +60,33 @@ export function TtsPanel() {
       audio.onended = () => setPlaying(false)
       audio.onpause = () => setPlaying(false)
       await audio.play()
+
+      // Add to history
+      addHistory({
+        id: crypto.randomUUID(),
+        text: ttsText.slice(0, 200),
+        voice,
+        provider,
+        timestamp: Date.now(),
+      })
+      // Persist history to backend
+      fetch('http://localhost:3002/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: ttsText.slice(0, 200),
+          voice,
+          provider,
+          timestamp: Date.now(),
+        }),
+      }).catch(() => {})
     } catch (err) {
       alert(`Erreur TTS: ${err instanceof Error ? err.message : err}`)
     } finally {
       setGenerating(false)
+      setGenerateProgress(null)
     }
-  }, [ttsText, voice, provider, speed, audioUrl, setGenerating, setPlaying, setAudioUrl])
+  }, [ttsText, voice, provider, speed, audioUrl, setGenerating, setPlaying, setAudioUrl, setGenerateProgress, addHistory])
 
   const handleStop = useCallback(() => {
     if (audioRef.current) {
@@ -69,14 +105,59 @@ export function TtsPanel() {
     a.click()
   }, [audioUrl])
 
+  // Keyboard shortcut: Ctrl+Enter = play
+  useEffect(() => {
+    const handler = (e: Event) => {
+      if ((e as CustomEvent).type === 'voiceforge:play') handlePlay()
+    }
+    window.addEventListener('voiceforge:play', handler)
+    return () => window.removeEventListener('voiceforge:play', handler)
+  }, [handlePlay])
+
+  // Drag & drop
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragging(false)
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+
+    const files = e.dataTransfer.files
+    if (files.length === 0) return
+
+    const file = files[0]
+    if (file.type === 'text/plain' || file.name.endsWith('.md') || file.name.endsWith('.txt')) {
+      const reader = new FileReader()
+      reader.onload = (ev) => {
+        const content = ev.target?.result as string
+        if (content) setTtsText(content)
+      }
+      reader.readAsText(file)
+    } else {
+      alert('Format supporte: .txt, .md')
+    }
+  }, [setTtsText])
+
+  const cost = estimateCost(ttsText, provider)
+  const chunks = splitText(ttsText)
+
   return (
     <div className="panel tts-panel">
       <textarea
-        className="tts-textarea"
+        className={`tts-textarea ${isDragging ? 'tts-textarea--dragging' : ''}`}
         value={ttsText}
         onChange={(e) => setTtsText(e.target.value)}
-        placeholder="Colle ton texte ici..."
+        placeholder="Colle ton texte ici ou drop un fichier .txt / .md"
         rows={12}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
       />
 
       <div className="tts-controls">
@@ -103,7 +184,7 @@ export function TtsPanel() {
               onClick={handlePlay}
               disabled={isGenerating || !ttsText.trim()}
             >
-              {isGenerating ? 'Generation...' : 'Play'}
+              {isGenerating ? (generateProgress || 'Generation...') : 'Play'}
             </button>
           )}
           {audioUrl && (
@@ -113,7 +194,13 @@ export function TtsPanel() {
       </div>
 
       <div className="tts-info">
-        {ttsText.length > 0 && <span>{ttsText.length} caracteres</span>}
+        {ttsText.length > 0 && (
+          <>
+            <span>{ttsText.length} caracteres</span>
+            {chunks.length > 1 && <span> · {chunks.length} parties</span>}
+            {cost && <span> · {cost}</span>}
+          </>
+        )}
       </div>
     </div>
   )

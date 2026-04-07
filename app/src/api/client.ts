@@ -6,6 +6,7 @@ export interface VoiceForgeSettings {
   defaultVoice: string
   defaultProvider: 'openai' | 'elevenlabs'
   speed: number
+  theme?: string
 }
 
 // --- TTS ---
