@@ -25,8 +25,27 @@ export function TtsPanel() {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const [isDragging, setIsDragging] = useState(false)
 
+  // Track which text was used to generate current audio
+  const lastGeneratedTextRef = useRef<string>('')
+
   const handlePlay = useCallback(async () => {
     if (!ttsText.trim()) return
+
+    // If audio already exists for this exact text, just replay it
+    if (audioUrl && lastGeneratedTextRef.current === ttsText) {
+      if (audioRef.current) {
+        audioRef.current.currentTime = 0
+        audioRef.current.play()
+        return
+      }
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+      audio.onplay = () => setPlaying(true)
+      audio.onended = () => setPlaying(false)
+      audio.onpause = () => setPlaying(false)
+      await audio.play()
+      return
+    }
 
     if (audioRef.current) {
       audioRef.current.pause()
@@ -46,27 +65,53 @@ export function TtsPanel() {
         return
       }
       const chunks = splitText(cleaned)
-      const blobs: Blob[] = []
+      const allBlobs: Blob[] = []
 
+      // Play first chunk immediately, queue the rest
       for (let i = 0; i < chunks.length; i++) {
         if (chunks.length > 1) {
           setGenerateProgress(`Partie ${i + 1}/${chunks.length}...`)
         }
         const buffer = await synthesize(chunks[i], voice, provider, speed)
-        blobs.push(new Blob([buffer], { type: 'audio/mpeg' }))
+        const blob = new Blob([buffer], { type: 'audio/mpeg' })
+        allBlobs.push(blob)
+
+        if (i === 0) {
+          // Play first chunk right away
+          setGenerateProgress(chunks.length > 1 ? `Lecture 1/${chunks.length}...` : null)
+          const url = URL.createObjectURL(blob)
+          setAudioUrl(url)
+          const audio = new Audio(url)
+          audioRef.current = audio
+          audio.onplay = () => setPlaying(true)
+          audio.onpause = () => setPlaying(false)
+
+          // When first chunk ends, play remaining
+          audio.onended = async () => {
+            if (allBlobs.length > 1) {
+              const remaining = new Blob(allBlobs.slice(1), { type: 'audio/mpeg' })
+              const remUrl = URL.createObjectURL(remaining)
+              const remAudio = new Audio(remUrl)
+              audioRef.current = remAudio
+              remAudio.onplay = () => setPlaying(true)
+              remAudio.onended = () => { setPlaying(false); setGenerateProgress(null) }
+              remAudio.onpause = () => setPlaying(false)
+              setAudioUrl(remUrl)
+              remAudio.play()
+            } else {
+              setPlaying(false)
+              setGenerateProgress(null)
+            }
+          }
+          await audio.play()
+        }
       }
 
       setGenerateProgress(null)
-      const fullBlob = new Blob(blobs, { type: 'audio/mpeg' })
-      const url = URL.createObjectURL(fullBlob)
-      setAudioUrl(url)
-
-      const audio = new Audio(url)
-      audioRef.current = audio
-      audio.onplay = () => setPlaying(true)
-      audio.onended = () => setPlaying(false)
-      audio.onpause = () => setPlaying(false)
-      await audio.play()
+      // Store full audio for export + replay
+      const fullUrl = URL.createObjectURL(new Blob(allBlobs, { type: 'audio/mpeg' }))
+      setAudioUrl(fullUrl)
+      lastGeneratedTextRef.current = ttsText
 
       // Add to history
       addHistory({
